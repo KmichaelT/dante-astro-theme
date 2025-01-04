@@ -1,45 +1,165 @@
 ---
-import { type CollectionEntry, getCollection, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import ProjectPreview from '../../components/ProjectPreview.astro';
+import { getCollection } from 'astro:content';
+import { supabase, type Project } from '../../lib/supabase';
 import { sortItemsByDateDesc } from '../../utils/data-utils';
 
 export async function getStaticPaths() {
-    const projects = (await getCollection('projects')).sort(sortItemsByDateDesc);
-    const projectCount = projects.length;
-    return projects.map((project, index) => ({
+    // Get MD file projects
+    const mdProjects = (await getCollection('projects')).sort(sortItemsByDateDesc);
+    const mdPaths = mdProjects.map((project, index) => ({
         params: { id: project.id },
         props: {
             project,
-            prevProject: index + 1 !== projectCount ? projects[index + 1] : null,
-            nextProject: index !== 0 ? projects[index - 1] : null
+            isSupabase: false,
+            prevProject: index + 1 !== mdProjects.length ? mdProjects[index + 1] : null,
+            nextProject: index !== 0 ? mdProjects[index - 1] : null
         }
     }));
+
+    // Get Supabase projects
+    const { data: supabaseProjects, error } = await supabase
+        .from('projects')
+        .select(
+            `
+            *,
+            project_features (*),
+            project_objectives (*),
+            project_technologies (*),
+            project_testimonials (*)
+        `
+        )
+        .order('publish_date', { ascending: false });
+
+    if (error) throw error;
+
+    const supaPaths = supabaseProjects.map((project, index) => ({
+        params: { id: project.slug },
+        props: {
+            project,
+            isSupabase: true,
+            prevProject: index + 1 !== supabaseProjects.length ? supabaseProjects[index + 1] : null,
+            nextProject: index !== 0 ? supabaseProjects[index - 1] : null
+        }
+    }));
+
+    return [...mdPaths, ...supaPaths];
 }
 
-type Props = { project: CollectionEntry<'projects'>; prevProject: CollectionEntry<'projects'>; nextProject: CollectionEntry<'projects'> };
+const { project, isSupabase, prevProject, nextProject } = Astro.props;
 
-const { project, prevProject, nextProject } = Astro.props;
-const { title, description, seo } = project.data;
-const { Content } = await render(project);
+// Handle both MD and Supabase content
+const title = isSupabase ? project.title : project.data.title;
+const description = isSupabase ? project.description : project.data.description;
+const seoImage = isSupabase ? { src: project.seo_image_src, alt: project.seo_image_alt } : project.data.seo?.image;
+
+let content;
+if (!isSupabase) {
+    const { Content } = await project.render();
+    content = Content;
+}
 ---
 
-<BaseLayout title={seo?.title ?? title} description={seo?.description ?? description} image={seo?.image} pageType="article" showHeader={false}>
-    <article class="mb-16 sm:mb-24">
-        <header class="mb-8">
-            <h1 class="text-3xl leading-tight font-serif font-medium sm:text-5xl sm:leading-tight">{title}</h1>
-        </header>
-        <div class="max-w-none prose prose-dante sm:prose-lg">
-            <Content />
-        </div>
-    </article>
-    {
-        (prevProject || nextProject) && (
-            <div class="my-16 sm:my-24">
-                <h2 class="mb-12 text-xl font-serif italic sm:mb-16 sm:text-2xl">View Next</h2>
-                {nextProject && <ProjectPreview project={nextProject} class="mb-10 sm:mb-12" headingLevel="h3" />}
-                {prevProject && <ProjectPreview project={prevProject} class="mb-10 sm:mb-12" headingLevel="h3" />}
+<BaseLayout title={title} description={description} image={seoImage} pageType="article" showHeader={false}>
+    <main class="grow w-full max-w-3xl mx-auto">
+        <article class="mb-16 sm:mb-24">
+            <header class="mb-8">
+                <h1 class="text-3xl leading-tight font-serif font-medium sm:text-5xl sm:leading-tight">
+                    {title}
+                </h1>
+            </header>
+
+            <div class="max-w-none prose prose-dante sm:prose-lg">
+                {
+                    isSupabase ? (
+                        <>
+                            {project.preview_image_src && (
+                                <p>
+                                    <img src={project.preview_image_src} alt={`${title} preview`} />
+                                </p>
+                            )}
+
+                            <p>
+                                <strong>Project Overview:</strong> {project.content}
+                            </p>
+
+                            {project.project_objectives?.length > 0 && (
+                                <>
+                                    <h2 id="objectives">Objectives</h2>
+                                    <ol>
+                                        {project.project_objectives?.map((objective: { content: string }) => (
+                                            <li>{objective.content}</li>
+                                        ))}
+                                    </ol>
+                                </>
+                            )}
+
+                            {project.project_features?.length > 0 && (
+                                <>
+                                    <h2 id="features">Features</h2>
+                                    {project.project_features?.map((feature: any, index: number) => (
+                                        <>
+                                            <ol start={index + 1}>
+                                                <li>
+                                                    <strong>{feature.title}:</strong>
+                                                </li>
+                                            </ol>
+                                            <ul>
+                                                <li>{feature.description}</li>
+                                            </ul>
+                                        </>
+                                    ))}
+                                </>
+                            )}
+
+                            {project.project_technologies?.length > 0 && (
+                                <>
+                                    <h2 id="technology-stack">Technology Stack</h2>
+                                    <ul>
+                                        {project.project_technologies?.map((tech: { name: string; description: string }) => (
+                                            <li>
+                                                {tech.name}: {tech.description}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </>
+                            )}
+
+                            {project.outcome && (
+                                <>
+                                    <h2 id="outcome">Outcome</h2>
+                                    <p>{project.outcome}</p>
+                                </>
+                            )}
+
+                            {project.project_testimonials?.length > 0 && (
+                                <>
+                                    <h2 id="client-testimonials">Client Testimonials</h2>
+                                    {project.project_testimonials?.map((testimonial: { quote: string; author: string }) => (
+                                        <blockquote>
+                                            <p>{testimonial.quote}</p>
+                                            <footer>— {testimonial.author}</footer>
+                                        </blockquote>
+                                    ))}
+                                </>
+                            )}
+                        </>
+                    ) : (
+                        <content.default />
+                    )
+                }
             </div>
-        )
-    }
+        </article>
+
+        {
+            (prevProject || nextProject) && (
+                <div class="my-16 sm:my-24">
+                    <h2 class="mb-12 text-xl font-serif italic sm:mb-16 sm:text-2xl">View Next</h2>
+                    {nextProject && <ProjectPreview project={isSupabase ? nextProject : { data: nextProject.data }} class="mb-10 sm:mb-12" headingLevel="h3" />}
+                    {prevProject && <ProjectPreview project={isSupabase ? prevProject : { data: prevProject.data }} class="mb-10 sm:mb-12" headingLevel="h3" />}
+                </div>
+            )
+        }
+    </main>
 </BaseLayout>

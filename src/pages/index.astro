@@ -7,12 +7,32 @@ import PostPreview from '../components/PostPreview.astro';
 import ProjectPreview from '../components/ProjectPreview.astro';
 import siteConfig from '../data/site-config';
 import { sortItemsByDateDesc } from '../utils/data-utils';
+import { supabase, type Project } from '../lib/supabase';
 
+// Get blog posts (keeping this the same for now)
 const posts = (await getCollection('blog')).sort(sortItemsByDateDesc);
 const featuredPosts = posts.filter(({ data }) => data.isFeatured);
 
-const projects = (await getCollection('projects')).sort(sortItemsByDateDesc);
-const featuredProjects = projects.filter(({ data }) => data.isFeatured);
+// Get projects from Supabase
+const { data: projects, error } = await supabase
+    .from('projects')
+    .select(
+        `
+        *,
+        project_features (*),
+        project_objectives (*),
+        project_technologies (*)
+    `
+    )
+    .eq('is_featured', true) // Add this column to your Supabase table
+    .order('publish_date', { ascending: false });
+
+if (error) {
+    console.error('Error fetching projects:', error);
+    throw error;
+}
+
+const featuredProjects = projects || [];
 ---
 
 <BaseLayout description={siteConfig.description} image={siteConfig.image}>

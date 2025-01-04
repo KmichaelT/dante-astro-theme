@@ -1,15 +1,24 @@
 ---
-import { type CollectionEntry } from 'astro:content';
 import ArrowRight from '../icons/ArrowRight.astro';
+import type { Project } from '../lib/supabase';
 
-type Props = { project: CollectionEntry<'projects'>; class?: string; headingLevel?: 'h2' | 'h3' };
+type Props = {
+    project: Project | { data: any };
+    class?: string;
+    headingLevel?: 'h2' | 'h3';
+};
 
 const { project, class: className, headingLevel = 'h2' } = Astro.props;
-const { title, description } = project.data;
 const TitleTag = headingLevel;
+
+// Handle both Supabase and MD projects
+const isSupabaseProject = !('data' in project);
+const title = isSupabaseProject ? project.title : project.data.title;
+const description = isSupabaseProject ? project.description : project.data.description;
+const linkPath = isSupabaseProject ? project.slug : project.id;
 ---
 
-<a class:list={['flex justify-between items-start gap-8 group', className]} href={`/projects/${project.id}/`}>
+<a class:list={['flex justify-between items-start gap-8 group', className]} href={`/projects/${linkPath}`}>
     <div class="grow">
         <TitleTag
             class="text-xl leading-tight font-serif font-medium group-hover:underline group-hover:decoration-dashed group-hover:underline-offset-4 group-hover:decoration-1 sm:text-2xl"

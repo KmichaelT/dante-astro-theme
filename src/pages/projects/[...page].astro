@@ -1,18 +1,30 @@
 ---
 import type { GetStaticPathsOptions, Page } from 'astro';
-import { type CollectionEntry, getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Pagination from '../../components/Pagination.astro';
 import ProjectPreview from '../../components/ProjectPreview.astro';
 import siteConfig from '../../data/site-config';
-import { sortItemsByDateDesc } from '../../utils/data-utils';
+import { supabase, type Project } from '../../lib/supabase';
 
 export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
-    const projects = (await getCollection('projects')).sort(sortItemsByDateDesc);
+    const { data: projects, error } = await supabase
+        .from('projects')
+        .select(
+            `
+            *,
+            project_features (*),
+            project_objectives (*),
+            project_technologies (*)
+        `
+        )
+        .order('publish_date', { ascending: false });
+
+    if (error) throw error;
+
     return paginate(projects, { pageSize: siteConfig.projectsPerPage || 6 });
 }
 
-type Props = { page: Page<CollectionEntry<'projects'>> };
+type Props = { page: Page<Project> };
 
 const { page } = Astro.props;
 const portfolio = page.data;
